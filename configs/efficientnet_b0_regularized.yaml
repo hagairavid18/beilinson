@@ -1,0 +1,48 @@
+exp_name: efficientnet_b0_regularized  # names this run's output folder, artifacts/<exp_name>/
+
+mode:
+  name: colab_training
+  seed: 42
+  build_artifacts: true
+
+data:
+  data_dir: data
+  artifacts_dir: artifacts
+  sequence_len: 16
+  image_size: 224  # ImageNet-pretrained backbones expect ~224; only 'custom' tolerates smaller.
+  batch_size: 32  # frozen backbone keeps GPU compute cheap; T4 has headroom above 16.
+  num_workers: 2
+  train_frac: 0.70
+  val_frac: 0.15
+  test_frac: 0.15
+  manifest_name: sequence_manifest_len16.csv
+  augment: true  # train split only: per-epoch temporal jitter + random horizontal flip
+
+model:
+  # Same architecture as configs/base.yaml (73.5% val_acc, but with train_acc near 100% -
+  # a large train/val gap, i.e. overfitting the small trainable head). This config adds
+  # regularization on top without changing the architecture, to see how much of that gap
+  # is closeable.
+  backbone: efficientnet_b0
+  freeze_backbone: true  # only train the projection/classifier head on top of it
+  in_channels: 3
+  hidden_dims: [32, 64, 128]  # only used when backbone: custom
+  embedding_dim: 256
+  dropout: 0.20
+  temporal_pooling: mean
+
+training:
+  lr: 0.001
+  weight_decay: 0.001  # 10x base.yaml's 0.0001 - directly penalizes the head for memorizing
+  lr_step_size: 20  # StepLR: multiply lr by lr_gamma every lr_step_size epochs
+  lr_gamma: 0.5
+  max_epochs: 50  # needs to be well above lr_step_size for the schedule to actually matter
+  accelerator: auto
+  devices: auto
+  precision: 32-true
+  log_every_n_steps: 10
+  patience: 4
+  label_smoothing: 0.1  # softens targets - discourages driving predictions to overconfident near-100% train acc
+  class_weighted_loss: true  # loss weighted by max_count/count per class (see training_utils.compute_class_weights) -
+                              # the ~6x class imbalance otherwise lets the model partly "solve" training loss by
+                              # memorizing the few examples of rare classes instead of learning to generalize on them

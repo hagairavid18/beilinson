@@ -14,14 +14,21 @@ class WorkoutLightningModule(pl.LightningModule):
         weight_decay: float = 0.0,
         lr_step_size: int | None = None,
         lr_gamma: float = 0.5,
+        label_smoothing: float = 0.0,
+        class_weights: torch.Tensor | None = None,
     ) -> None:
         super().__init__()
-        self.save_hyperparameters(ignore=["model"])
+        self.save_hyperparameters(ignore=["model", "class_weights"])
         self.model = model
         self.lr = lr
         self.weight_decay = weight_decay
         self.lr_step_size = lr_step_size
         self.lr_gamma = lr_gamma
+        self.label_smoothing = label_smoothing
+        # Not a buffer/param (it's derived data, not learned) - moved to the right device
+        # manually in _step instead, so it round-trips through load_from_checkpoint fine
+        # (class_weights isn't saved; predictions/accuracy don't depend on it anyway).
+        self.class_weights = class_weights
 
     def forward(self, frames: torch.Tensor) -> torch.Tensor:
         return self.model(frames)
@@ -30,7 +37,8 @@ class WorkoutLightningModule(pl.LightningModule):
         frames = batch["frames"]
         labels = batch["label"]
         logits = self(frames)
-        loss = F.cross_entropy(logits, labels)
+        weight = self.class_weights.to(logits.device) if self.class_weights is not None else None
+        loss = F.cross_entropy(logits, labels, weight=weight, label_smoothing=self.label_smoothing)
         predictions = logits.argmax(dim=1)
         accuracy = (predictions == labels).float().mean()
         self.log(f"{stage}_loss", loss, prog_bar=(stage != "train"), on_step=(stage == "train"), on_epoch=True)

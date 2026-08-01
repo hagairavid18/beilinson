@@ -115,6 +115,23 @@ def ensure_artifacts(cfg: dict[str, Any], project_root: Path) -> dict[str, Path]
     }
 
 
+def compute_class_weights(
+    sequence_manifest_path: Path, label_map_path: Path, split: str = "train"
+) -> torch.Tensor:
+    """Per-class loss weight (max_count / count) from split's clip counts, ordered by
+    label_id - upweights rare classes so the loss stops treating a mistake on a common
+    class the same as one on a class with several times fewer training clips.
+    """
+    manifest = pd.read_csv(sequence_manifest_path)
+    manifest = manifest[manifest["split"] == split]
+
+    label_map = pd.read_csv(label_map_path).sort_values("label_id")
+    counts = manifest["label_id"].value_counts().reindex(label_map["label_id"], fill_value=0)
+
+    weights = counts.max() / counts.clip(lower=1)
+    return torch.tensor(weights.to_numpy(), dtype=torch.float32)
+
+
 def ensure_image_cache(project_root: Path, image_size: int) -> Path:
     """Pre-resize every image once into artifacts/image_cache_<size>/data/<class>/<file>,
     mirroring data/'s layout so the returned path is a drop-in data_root for
@@ -386,12 +403,19 @@ def _run_training(cfg: dict[str, Any], project_root: Path) -> dict[str, Any]:
         freeze_backbone=model_cfg.get("freeze_backbone", True),
         classifier_hidden_dim=model_cfg.get("classifier_hidden_dim"),
     )
+
+    class_weights = None
+    if training_cfg.get("class_weighted_loss", False):
+        class_weights = compute_class_weights(artifacts["sequence_manifest"], artifacts["label_map"], split="train")
+
     lit_module = WorkoutLightningModule(
         model=model,
         lr=training_cfg["lr"],
         weight_decay=training_cfg["weight_decay"],
         lr_step_size=training_cfg.get("lr_step_size"),
         lr_gamma=training_cfg.get("lr_gamma", 0.5),
+        label_smoothing=training_cfg.get("label_smoothing", 0.0),
+        class_weights=class_weights,
     )
 
     checkpoint_dir = exp_dir / "checkpoints"
