@@ -8,7 +8,7 @@ data:
   artifacts_dir: artifacts
   sequence_len: 16
   image_size: 224  # ImageNet-pretrained backbones expect ~224; only 'custom' tolerates smaller.
-  batch_size: 16
+  batch_size: 32  # frozen backbone keeps GPU compute cheap; T4 has headroom above 16.
   num_workers: 2
   train_frac: 0.70
   val_frac: 0.15
@@ -24,7 +24,7 @@ model:
   in_channels: 3
   hidden_dims: [32, 64, 128]  # only used when backbone: custom
   embedding_dim: 128
-  dropout: 0.20
+  dropout: 0.10  # backbone is frozen (tiny trainable head) - 0.20 was likely just slowing convergence.
   temporal_pooling: mean
 
 training:
