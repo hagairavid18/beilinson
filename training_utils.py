@@ -142,8 +142,21 @@ def save_results(
 
 def epoch_history(trainer: pl.Trainer) -> pd.DataFrame:
     """Per-epoch train/val loss+acc from the CSVLogger, for a clean summary table."""
-    log_dir = Path(trainer.logger.log_dir)
-    metrics_path = log_dir / "metrics.csv"
+    trainer.logger.save()  # force-flush any buffered rows before reading
+
+    metrics_path = Path(trainer.logger.log_dir) / "metrics.csv"
+    if not metrics_path.exists():
+        # trainer.logger.log_dir's version can shift between when training started and
+        # when this is called; fall back to the most recently modified metrics.csv
+        # under the logger's root directory.
+        candidates = sorted(
+            Path(trainer.logger.root_dir).glob("*/metrics.csv"),
+            key=lambda p: p.stat().st_mtime,
+        )
+        if not candidates:
+            raise FileNotFoundError(f"No metrics.csv found under {trainer.logger.root_dir}")
+        metrics_path = candidates[-1]
+
     history = pd.read_csv(metrics_path)
     cols = [c for c in ["epoch", "train_loss", "train_acc", "val_loss", "val_acc"] if c in history.columns]
     return history[cols].groupby("epoch").last().reset_index()
