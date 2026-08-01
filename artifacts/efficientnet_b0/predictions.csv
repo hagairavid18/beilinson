@@ -1,0 +1,145 @@
+clip_id,class_name,label,prediction,confidence,correct
+barbell biceps curl|num_170,barbell biceps curl,0,0,0.9019177556037903,True
+barbell biceps curl|num_20,barbell biceps curl,0,0,0.8704296350479126,True
+barbell biceps curl|num_240,barbell biceps curl,0,0,0.8858168721199036,True
+barbell biceps curl|num_260,barbell biceps curl,0,0,0.873233437538147,True
+barbell biceps curl|num_280,barbell biceps curl,0,0,0.860791027545929,True
+barbell biceps curl|num_30,barbell biceps curl,0,0,0.7831194996833801,True
+barbell biceps curl|num_310,barbell biceps curl,0,0,0.903235673904419,True
+barbell biceps curl|num_350,barbell biceps curl,0,0,0.8817342519760132,True
+barbell biceps curl|num_610,barbell biceps curl,0,0,0.8933144807815552,True
+barbell biceps curl|num_620,barbell biceps curl,0,0,0.8950175046920776,True
+barbell biceps curl|num_90,barbell biceps curl,0,0,0.8829493522644043,True
+bench press|num_160,bench press,1,7,0.5901055932044983,False
+bench press|num_180,bench press,1,1,0.7928921580314636,True
+bench press|num_200,bench press,1,1,0.8321462273597717,True
+bench press|num_220,bench press,1,1,0.8883532881736755,True
+bench press|num_30,bench press,1,1,0.8814112544059753,True
+bench press|num_300,bench press,1,1,0.8762495517730713,True
+bench press|num_410,bench press,1,1,0.7912024259567261,True
+bench press|num_450,bench press,1,1,0.6312936544418335,True
+bench press|num_470,bench press,1,1,0.8437986969947815,True
+bench press|num_510,bench press,1,5,0.7100306749343872,False
+bench press|num_70,bench press,1,7,0.7952187061309814,False
+chest fly machine|g23,chest fly machine,2,2,0.5658525228500366,True
+chest fly machine|g26,chest fly machine,2,0,0.13995817303657532,False
+chest fly machine|g5,chest fly machine,2,2,0.9336697459220886,True
+chest fly machine|num_120,chest fly machine,2,2,0.8970891237258911,True
+chest fly machine|num_170,chest fly machine,2,2,0.9061086773872375,True
+chest fly machine|num_240,chest fly machine,2,2,0.8329389095306396,True
+chest fly machine|num_60,chest fly machine,2,2,0.7058415412902832,True
+deadlift|num_110,deadlift,3,3,0.9385226368904114,True
+deadlift|num_140,deadlift,3,3,0.9202597141265869,True
+deadlift|num_20,deadlift,3,3,0.9011688828468323,True
+deadlift|num_300,deadlift,3,3,0.9066044688224792,True
+deadlift|num_320,deadlift,3,3,0.9071610569953918,True
+deadlift|num_60,deadlift,3,3,0.9317970275878906,True
+deadlift|num_80,deadlift,3,3,0.9313567280769348,True
+decline bench press|g1,decline bench press,4,1,0.19072094559669495,False
+decline bench press|g14,decline bench press,4,1,0.7836509346961975,False
+decline bench press|g17,decline bench press,4,4,0.8434255719184875,True
+decline bench press|g6,decline bench press,4,4,0.6150258779525757,True
+hammer curl|g12,hammer curl,5,17,0.17851269245147705,False
+hammer curl|g13,hammer curl,5,5,0.8952426314353943,True
+hammer curl|g3,hammer curl,5,21,0.796870231628418,False
+hammer curl|num_130,hammer curl,5,5,0.9167636036872864,True
+hammer curl|num_190,hammer curl,5,5,0.9082509875297546,True
+hammer curl|num_40,hammer curl,5,5,0.2786271572113037,True
+hip thrust|g1,hip thrust,6,6,0.8915055394172668,True
+hip thrust|g19,hip thrust,6,6,0.36454257369041443,True
+hip thrust|g2,hip thrust,6,3,0.45057523250579834,False
+hip thrust|num_10,hip thrust,6,6,0.45333245396614075,True
+hip thrust|num_20,hip thrust,6,15,0.7019344568252563,False
+incline bench press|g22,incline bench press,7,7,0.7750545740127563,True
+incline bench press|g24,incline bench press,7,7,0.8446440696716309,True
+incline bench press|g25,incline bench press,7,7,0.9176451563835144,True
+incline bench press|g4,incline bench press,7,10,0.4953177869319916,False
+incline bench press|g5,incline bench press,7,7,0.4744224548339844,True
+incline bench press|num_180,incline bench press,7,7,0.9224004149436951,True
+incline bench press|num_200,incline bench press,7,7,0.696592390537262,True
+incline bench press|num_240,incline bench press,7,7,0.44069328904151917,True
+incline bench press|num_330,incline bench press,7,7,0.8892902135848999,True
+lat pulldown|num_10,lat pulldown,8,8,0.7893587946891785,True
+lat pulldown|num_160,lat pulldown,8,8,0.7877853512763977,True
+lat pulldown|num_180,lat pulldown,8,8,0.9036398530006409,True
+lat pulldown|num_250,lat pulldown,8,8,0.8974717259407043,True
+lat pulldown|num_280,lat pulldown,8,8,0.7943606972694397,True
+lat pulldown|num_30,lat pulldown,8,8,0.8426204919815063,True
+lat pulldown|num_320,lat pulldown,8,8,0.8912690281867981,True
+lat pulldown|num_330,lat pulldown,8,8,0.8357776403427124,True
+lat pulldown|num_380,lat pulldown,8,8,0.818327784538269,True
+lat pulldown|num_90,lat pulldown,8,8,0.868195116519928,True
+lateral raises|g1,lateral raises,9,9,0.6595979928970337,True
+lateral raises|g17,lateral raises,9,9,0.5448158979415894,True
+lateral raises|g28,lateral raises,9,9,0.6502107381820679,True
+lateral raises|g29,lateral raises,9,9,0.7526642084121704,True
+lateral raises|g32,lateral raises,9,9,0.8167001605033875,True
+lateral raises|num_30,lateral raises,9,9,0.578941822052002,True
+lateral raises|num_300,lateral raises,9,9,0.8894273042678833,True
+lateral raises|num_330,lateral raises,9,9,0.8692948222160339,True
+lateral raises|num_350,lateral raises,9,9,0.8442389369010925,True
+lateral raises|num_50,lateral raises,9,9,0.8498696088790894,True
+leg extension|g1,leg extension,10,10,0.7926629185676575,True
+leg extension|g13,leg extension,10,10,0.863997220993042,True
+leg extension|g19,leg extension,10,10,0.8388422727584839,True
+leg extension|g24,leg extension,10,10,0.6985366940498352,True
+leg extension|g4,leg extension,10,10,0.7490561008453369,True
+leg extension|g6,leg extension,10,10,0.8205124735832214,True
+leg extension|num_40,leg extension,10,10,0.9176764488220215,True
+leg raises|g14,leg raises,11,0,0.4352819621562958,False
+leg raises|g15,leg raises,11,11,0.9569005966186523,True
+leg raises|g17,leg raises,11,11,0.4933317303657532,True
+leg raises|num_160,leg raises,11,13,0.9272610545158386,False
+leg raises|num_170,leg raises,11,13,0.8765000700950623,False
+leg raises|num_190,leg raises,11,11,0.9328992962837219,True
+plank|g15,plank,12,12,0.9449350237846375,True
+plank|g2,plank,12,12,0.927725076675415,True
+plank|g8,plank,12,12,0.73494553565979,True
+pull up|g15,pull up,13,13,0.8901477456092834,True
+pull up|num_130,pull up,13,13,0.917687714099884,True
+pull up|num_200,pull up,13,20,0.8326171636581421,False
+pull up|num_210,pull up,13,8,0.38432589173316956,False
+pull up|num_220,pull up,13,17,0.7213099598884583,False
+pull up|num_60,pull up,13,13,0.925825834274292,True
+push up|num_140,push up,14,14,0.9125015735626221,True
+push up|num_190,push up,14,14,0.6830887198448181,True
+push up|num_20,push up,14,14,0.9206255078315735,True
+push up|num_310,push up,14,14,0.5985401272773743,True
+push up|num_320,push up,14,14,0.9229381680488586,True
+push up|num_370,push up,14,14,0.9209854602813721,True
+push up|num_500,push up,14,12,0.931243896484375,False
+romanian deadlift|num_20,romanian deadlift,15,15,0.9591547250747681,True
+russian twist|g14,russian twist,16,16,0.9540846347808838,True
+russian twist|g2,russian twist,16,16,0.9419320821762085,True
+russian twist|g9,russian twist,16,16,0.9332787394523621,True
+russian twist|num_130,russian twist,16,16,0.7030017971992493,True
+shoulder press|g1,shoulder press,17,17,0.8590132594108582,True
+shoulder press|g22,shoulder press,17,10,0.23409564793109894,False
+shoulder press|num_150,shoulder press,17,21,0.6153085827827454,False
+shoulder press|num_160,shoulder press,17,2,0.5799086093902588,False
+shoulder press|num_50,shoulder press,17,17,0.5898532867431641,True
+squat|num_200,squat,18,18,0.9020018577575684,True
+squat|num_40,squat,18,18,0.9247919917106628,True
+squat|num_50,squat,18,18,0.8876391649246216,True
+t bar row|g16,t bar row,19,19,0.782619059085846,True
+t bar row|g5,t bar row,19,3,0.3326808214187622,False
+t bar row|num_10,t bar row,19,19,0.9167588949203491,True
+t bar row|num_160,t bar row,19,19,0.6443786025047302,True
+t bar row|num_70,t bar row,19,19,0.8123083114624023,True
+tricep dips|g13,tricep dips,20,20,0.930682897567749,True
+tricep dips|g17,tricep dips,20,20,0.8814249038696289,True
+tricep dips|num_110,tricep dips,20,20,0.9421266317367554,True
+tricep dips|num_160,tricep dips,20,20,0.9440544247627258,True
+tricep dips|num_90,tricep dips,20,20,0.9350159764289856,True
+tricep pushdown|num_10,tricep pushdown,21,21,0.8843318819999695,True
+tricep pushdown|num_150,tricep pushdown,21,21,0.8770841956138611,True
+tricep pushdown|num_170,tricep pushdown,21,21,0.7607138156890869,True
+tricep pushdown|num_180,tricep pushdown,21,21,0.43676498532295227,True
+tricep pushdown|num_20,tricep pushdown,21,21,0.8892820477485657,True
+tricep pushdown|num_230,tricep pushdown,21,21,0.8909960985183716,True
+tricep pushdown|num_240,tricep pushdown,21,21,0.8841517567634583,True
+tricep pushdown|num_260,tricep pushdown,21,21,0.8847047686576843,True
+tricep pushdown|num_300,tricep pushdown,21,21,0.9034441113471985,True
+tricep pushdown|num_320,tricep pushdown,21,21,0.8496731519699097,True
+tricep pushdown|num_360,tricep pushdown,21,21,0.7162761092185974,True
+tricep pushdown|num_60,tricep pushdown,21,21,0.6938556432723999,True

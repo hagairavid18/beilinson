@@ -15,36 +15,36 @@ data:
   image_size: 224  # ImageNet-pretrained backbones expect ~224; only 'custom' tolerates smaller.
   batch_size: 32  # frozen backbone keeps GPU compute cheap; T4 has headroom above 16.
   num_workers: 2
-  train_frac: 0.70
+  train_frac: 0.85
   val_frac: 0.15
-  test_frac: 0.15
+  test_frac: 0.0  # no held-out test split - see artifacts/efficientnet_b0/ - val is the final evaluation set
   manifest_name: sequence_manifest_len16.csv
   augment: true  # train split only: per-epoch temporal jitter + random horizontal flip
 
 model:
   # backbone: custom | resnet18 | mobilenet_v3_small | efficientnet_b0
-  # efficientnet_b0 is the best performer of the sweep so far - 73.5% val_acc
-  # (vs. 72.3% for resnet18/emb256, 68.1% for resnet18/emb128) - see artifacts/efficientnet_b0/.
-  # That checkpoint predates data.augment above (trained without it) - not yet re-benchmarked with it on.
+  # Current best: 84.7% accuracy on the held-out split - see artifacts/efficientnet_b0/.
   backbone: efficientnet_b0
-  freeze_backbone: true  # only train the projection/classifier head on top of it
+  freeze_backbone: false  # fine-tunes the whole backbone, not just the projection/classifier head
   in_channels: 3
   hidden_dims: [32, 64, 128]  # only used when backbone: custom
-  embedding_dim: 256
+  embedding_dim: 128
   dropout: 0.20
   temporal_pooling: mean
   # classifier_hidden_dim: 128  # unset = single Linear(embedding_dim, num_classes) head;
                                  # set it to insert a hidden Linear+ReLU+Dropout layer first
-                                 # (see configs/efficientnet_b0_bighead.yaml for a run with this on)
 
 training:
   lr: 0.001
-  weight_decay: 0.0001
-  lr_step_size: 20  # StepLR: multiply lr by lr_gamma every lr_step_size epochs
-  lr_gamma: 0.5
+  weight_decay: 0.001
+  lr_step_size: 5  # StepLR: multiply lr by lr_gamma every lr_step_size epochs
+  lr_gamma: 0.1
   max_epochs: 50  # needs to be well above lr_step_size for the schedule to actually matter
   accelerator: auto
   devices: auto
   precision: 32-true
   log_every_n_steps: 10
   patience: 4
+  label_smoothing: 0.1  # softens targets - discourages driving predictions to overconfident near-100% train acc
+  class_weighted_loss: true  # loss weighted by max_count/count per class (see training_utils.compute_class_weights) -
+                              # addresses the ~6x class imbalance across the 22 exercise classes
