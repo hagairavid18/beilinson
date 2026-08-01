@@ -8,6 +8,9 @@ from typing import Any
 
 import lightning.pytorch as pl
 import pandas as pd
+import torch
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
 
 from data_splitter import build_artifacts
 
@@ -144,3 +147,49 @@ def epoch_history(trainer: pl.Trainer) -> pd.DataFrame:
     history = pd.read_csv(metrics_path)
     cols = [c for c in ["epoch", "train_loss", "train_acc", "val_loss", "val_acc"] if c in history.columns]
     return history[cols].groupby("epoch").last().reset_index()
+
+
+@torch.no_grad()
+def evaluate_multi_clip(
+    lit_module,
+    dataset,
+    batch_size: int = 4,
+    num_workers: int = 0,
+) -> tuple[float, pd.DataFrame]:
+    """Average softmax predictions over each clip's multiple windows (see MultiClipWorkoutDataset).
+
+    Returns (accuracy, per-clip results) so it can be compared directly against the
+    single-window accuracy from trainer.test()/epoch_history() on the same split.
+    """
+    device = next(lit_module.parameters()).device
+    was_training = lit_module.training
+    lit_module.eval()
+
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    rows: list[dict[str, Any]] = []
+
+    for batch in loader:
+        frames = batch["frames"].to(device)  # (B, num_clips, sequence_len, C, H, W)
+        num_windows = frames.shape[1]
+        logits = lit_module(frames.reshape(-1, *frames.shape[2:]))
+        probs = F.softmax(logits, dim=1).reshape(frames.shape[0], num_windows, -1).mean(dim=1)
+        confidence, prediction = probs.max(dim=1)
+
+        for i in range(frames.shape[0]):
+            label = int(batch["label"][i])
+            pred = int(prediction[i])
+            rows.append(
+                {
+                    "clip_id": batch["clip_id"][i],
+                    "class_name": batch["class_name"][i],
+                    "label": label,
+                    "prediction": pred,
+                    "confidence": float(confidence[i]),
+                    "correct": label == pred,
+                }
+            )
+
+    lit_module.train(was_training)
+    results = pd.DataFrame(rows)
+    accuracy = float(results["correct"].mean())
+    return accuracy, results

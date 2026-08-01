@@ -86,6 +86,25 @@ def sample_or_pad_indices(num_frames: int, sequence_len: int) -> np.ndarray:
     return np.concatenate([indices, pad])
 
 
+def sample_or_pad_indices_multi(num_frames: int, sequence_len: int, num_clips: int) -> np.ndarray:
+    """num_clips windows of sequence_len indices each, evenly covering [0, num_frames).
+
+    Splits the clip into num_clips contiguous segments (TSN-style) and applies
+    sample_or_pad_indices independently within each segment, so every window is sampled
+    the same way training's single-window clips are, just from a slice of the full clip.
+    Returns an array of shape (num_clips, sequence_len).
+    """
+    if num_clips <= 1:
+        return sample_or_pad_indices(num_frames, sequence_len)[None, :]
+
+    boundaries = np.linspace(0, num_frames, num_clips + 1, dtype=int)
+    windows = []
+    for start, end in zip(boundaries[:-1], boundaries[1:]):
+        local_indices = sample_or_pad_indices(end - start, sequence_len)
+        windows.append(start + local_indices)
+    return np.stack(windows)
+
+
 def _collect_frame_rows(data_dir: Path) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for class_dir in sorted([path for path in data_dir.iterdir() if path.is_dir()]):
