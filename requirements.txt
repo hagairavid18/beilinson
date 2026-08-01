@@ -1,0 +1,7 @@
+lightning
+numpy
+pandas
+matplotlib
+pillow
+pyyaml
+kaggle

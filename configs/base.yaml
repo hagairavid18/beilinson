@@ -1,0 +1,34 @@
+mode:
+  name: colab_training
+  seed: 42
+  build_artifacts: true
+
+data:
+  data_dir: data
+  artifacts_dir: artifacts
+  sequence_len: 16
+  image_size: 128
+  batch_size: 16
+  num_workers: 2
+  train_frac: 0.70
+  val_frac: 0.15
+  test_frac: 0.15
+  manifest_name: sequence_manifest_len16.csv
+
+model:
+  in_channels: 3
+  hidden_dims: [32, 64, 128]
+  embedding_dim: 128
+  dropout: 0.20
+  temporal_pooling: mean
+
+training:
+  lr: 0.001
+  weight_decay: 0.0001
+  max_epochs: 10
+  accelerator: auto
+  devices: auto
+  precision: 32-true
+  log_every_n_steps: 10
+  patience: 4
+  checkpoint_dir: artifacts/checkpoints
