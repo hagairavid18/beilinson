@@ -15,15 +15,15 @@ data:
   image_size: 224  # ImageNet-pretrained backbones expect ~224; only 'custom' tolerates smaller.
   batch_size: 32  # frozen backbone keeps GPU compute cheap; T4 has headroom above 16.
   num_workers: 2
-  train_frac: 0.85
-  val_frac: 0.15
+  train_frac: 0.9
+  val_frac: 0.1
   test_frac: 0.0  # no held-out test split - see artifacts/efficientnet_b0/ - val is the final evaluation set
   manifest_name: sequence_manifest_len16.csv
   augment: true  # train split only: per-epoch temporal jitter + random horizontal flip
 
 model:
   # backbone: custom | resnet18 | mobilenet_v3_small | efficientnet_b0
-  # Current best: 84.7% accuracy on the held-out split - see artifacts/efficientnet_b0/.
+  # Current best: 87.6% accuracy on the held-out split - see artifacts/efficientnet_b0/.
   backbone: efficientnet_b0
   freeze_backbone: false  # fine-tunes the whole backbone, not just the projection/classifier head
   in_channels: 3

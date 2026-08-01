@@ -1,10 +1,10 @@
 {
   "project_root": "c:\\Users\\hagai\\projects\\belinson",
-  "best_model_path": "c:\\Users\\hagai\\projects\\belinson\\artifacts\\efficientnet_b0\\checkpoints\\epochepoch=06-val_acc=0.868.ckpt",
+  "best_model_path": "c:\\Users\\hagai\\projects\\belinson\\artifacts\\efficientnet_b0\\checkpoints\\epochepoch=10-val_acc=0.899.ckpt",
   "test_results": [
     {
-      "test_loss": 1.1106939315795898,
-      "test_acc": 0.8472222089767456
+      "test_loss": 1.0369774103164673,
+      "test_acc": 0.8764045238494873
     }
   ],
   "artifacts": {
