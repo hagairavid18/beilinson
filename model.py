@@ -3,10 +3,39 @@ from __future__ import annotations
 from typing import Iterable
 
 import torch
+import torchvision.models as tv_models
 from torch import nn
+
+# Recommended for small datasets like this one (~1100 clips, 22 classes): MobileNetV3-Small
+# and EfficientNet-B0 are the strongest lightweight transfer-learning backbones in practice -
+# fast, few params relative to accuracy, and less prone to overfitting a small dataset than
+# larger nets. ResNet18 is included as a heavier, well-established alternative.
+_PRETRAINED_BACKBONES = {"resnet18", "mobilenet_v3_small", "efficientnet_b0"}
+
+
+def _build_pretrained_backbone(name: str) -> tuple[nn.Module, int]:
+    """Returns (feature extractor with its classification head removed, feature_dim)."""
+    if name == "resnet18":
+        net = tv_models.resnet18(weights=tv_models.ResNet18_Weights.IMAGENET1K_V1)
+        feature_dim = net.fc.in_features
+        net.fc = nn.Identity()
+        return net, feature_dim
+    if name == "mobilenet_v3_small":
+        net = tv_models.mobilenet_v3_small(weights=tv_models.MobileNet_V3_Small_Weights.IMAGENET1K_V1)
+        feature_dim = net.classifier[0].in_features
+        net.classifier = nn.Identity()
+        return net, feature_dim
+    if name == "efficientnet_b0":
+        net = tv_models.efficientnet_b0(weights=tv_models.EfficientNet_B0_Weights.IMAGENET1K_V1)
+        feature_dim = net.classifier[1].in_features
+        net.classifier = nn.Identity()
+        return net, feature_dim
+    raise ValueError(f"Unknown pretrained backbone={name!r}, expected one of {sorted(_PRETRAINED_BACKBONES)}")
 
 
 class FrameEncoder(nn.Module):
+    """Small from-scratch CNN (the original backbone='custom' option)."""
+
     def __init__(
         self,
         in_channels: int = 3,
@@ -42,6 +71,36 @@ class FrameEncoder(nn.Module):
         return self.projection(x)
 
 
+class PretrainedFrameEncoder(nn.Module):
+    """ImageNet-pretrained torchvision backbone + a projection head to embedding_dim.
+
+    Expects ImageNet-normalized input (dataset.py already normalizes with ImageNet
+    mean/std regardless of backbone, so no dataset changes are needed to use this).
+    """
+
+    def __init__(
+        self,
+        backbone: str,
+        embedding_dim: int = 128,
+        dropout: float = 0.2,
+        freeze: bool = True,
+    ) -> None:
+        super().__init__()
+        self.backbone, feature_dim = _build_pretrained_backbone(backbone)
+        if freeze:
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+        self.projection = nn.Sequential(
+            nn.Linear(feature_dim, embedding_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        features = self.backbone(x)
+        return self.projection(features)
+
+
 class SequenceClassifier(nn.Module):
     def __init__(
         self,
@@ -51,15 +110,28 @@ class SequenceClassifier(nn.Module):
         embedding_dim: int = 128,
         dropout: float = 0.2,
         temporal_pooling: str = "mean",
+        backbone: str = "custom",
+        freeze_backbone: bool = True,
     ) -> None:
         super().__init__()
         self.temporal_pooling = temporal_pooling.lower()
-        self.frame_encoder = FrameEncoder(
-            in_channels=in_channels,
-            hidden_dims=hidden_dims,
-            embedding_dim=embedding_dim,
-            dropout=dropout,
-        )
+
+        if backbone == "custom":
+            self.frame_encoder = FrameEncoder(
+                in_channels=in_channels,
+                hidden_dims=hidden_dims,
+                embedding_dim=embedding_dim,
+                dropout=dropout,
+            )
+        elif backbone in _PRETRAINED_BACKBONES:
+            self.frame_encoder = PretrainedFrameEncoder(
+                backbone=backbone,
+                embedding_dim=embedding_dim,
+                dropout=dropout,
+                freeze=freeze_backbone,
+            )
+        else:
+            raise ValueError(f"Unknown backbone={backbone!r}, expected 'custom' or one of {sorted(_PRETRAINED_BACKBONES)}")
 
         if self.temporal_pooling == "lstm":
             hidden_size = max(16, embedding_dim // 2)

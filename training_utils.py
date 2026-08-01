@@ -117,8 +117,14 @@ def save_results(
     test_results: list[dict[str, float]],
     prediction_batches: list[dict[str, Any]],
     project_root: Path,
+    cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Flatten predictions to CSV and write a training_summary.json; returns the summary dict."""
+    """Flatten predictions to CSV and write a training_summary.json; returns the summary dict.
+
+    Persists cfg['model'] (the architecture config, e.g. which backbone) alongside the
+    checkpoint path, so 05_inference.ipynb can rebuild the exact matching architecture
+    later even if configs/base.yaml's defaults have since changed.
+    """
     prediction_frame = _flatten_prediction_batches(prediction_batches)
     prediction_path = artifacts["sequence_manifest"].parent / "predictions.csv"
     prediction_frame.to_csv(prediction_path, index=False)
@@ -129,6 +135,7 @@ def save_results(
         "test_results": test_results,
         "artifacts": {name: str(path) for name, path in artifacts.items()},
         "predictions_path": str(prediction_path),
+        "model_config": (cfg or {}).get("model", {}),
     }
 
     summary_path = artifacts["sequence_manifest"].parent / "training_summary.json"
@@ -138,6 +145,48 @@ def save_results(
     print(f"Saved training summary to {summary_path}")
     print(f"Saved predictions to {prediction_path}")
     return summary
+
+
+def classification_metrics(results: pd.DataFrame, class_names: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Confusion matrix and per-class precision/recall/F1 from a predictions dataframe
+    with integer 'label'/'prediction' columns (predictions.csv or evaluate_multi_clip output).
+    class_names must be ordered by label_id (0..N-1)."""
+    from sklearn.metrics import classification_report, confusion_matrix
+
+    labels = list(range(len(class_names)))
+    confusion_df = pd.DataFrame(
+        confusion_matrix(results["label"], results["prediction"], labels=labels),
+        index=class_names,
+        columns=class_names,
+    )
+
+    report = classification_report(
+        results["label"],
+        results["prediction"],
+        labels=labels,
+        target_names=class_names,
+        output_dict=True,
+        zero_division=0,
+    )
+    report_df = pd.DataFrame(report).T
+    return confusion_df, report_df
+
+
+def plot_confusion_matrix(confusion_df: pd.DataFrame, title: str = "Confusion matrix"):
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(9, 8))
+    im = ax.imshow(confusion_df.values, cmap="Blues")
+    ax.set_xticks(range(len(confusion_df.columns)))
+    ax.set_xticklabels(confusion_df.columns, rotation=90)
+    ax.set_yticks(range(len(confusion_df.index)))
+    ax.set_yticklabels(confusion_df.index)
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("Actual")
+    ax.set_title(title)
+    fig.colorbar(im, ax=ax)
+    fig.tight_layout()
+    return fig
 
 
 def epoch_history(trainer: pl.Trainer) -> pd.DataFrame:

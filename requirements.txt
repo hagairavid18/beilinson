@@ -6,3 +6,5 @@ pillow
 pyyaml
 kaggle
 kagglehub
+torchvision
+scikit-learn
