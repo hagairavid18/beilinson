@@ -1,3 +1,8 @@
+exp_name: efficientnet_b0  # names this run's output folder, artifacts/<exp_name>/ - bump
+                           # this (not the yaml filename) when you consider a change here
+                           # a new experiment, so re-running Trainer.fit doesn't land in
+                           # the same folder as a previous, different run.
+
 mode:
   name: colab_training
   seed: 42
@@ -17,22 +22,25 @@ data:
 
 model:
   # backbone: custom | resnet18 | mobilenet_v3_small | efficientnet_b0
-  # mobilenet_v3_small/efficientnet_b0 are the recommended pretrained options for a
-  # dataset this small (fast, few params, less prone to overfitting than resnet18).
-  backbone: mobilenet_v3_small
+  # efficientnet_b0 is the best performer of the sweep so far - 73.5% val_acc
+  # (vs. 72.3% for resnet18/emb256, 68.1% for resnet18/emb128) - see artifacts/efficientnet_b0/.
+  backbone: efficientnet_b0
   freeze_backbone: true  # only train the projection/classifier head on top of it
   in_channels: 3
   hidden_dims: [32, 64, 128]  # only used when backbone: custom
-  embedding_dim: 128
-  dropout: 0.10  # backbone is frozen (tiny trainable head) - 0.20 was likely just slowing convergence.
+  embedding_dim: 256
+  dropout: 0.20
   temporal_pooling: mean
+  # classifier_hidden_dim: 128  # unset = single Linear(embedding_dim, num_classes) head;
+                                 # set it to insert a hidden Linear+ReLU+Dropout layer first
+                                 # (see configs/efficientnet_b0_bighead.yaml for a run with this on)
 
 training:
   lr: 0.001
   weight_decay: 0.0001
-  lr_step_size: 10  # StepLR: multiply lr by lr_gamma every lr_step_size epochs
+  lr_step_size: 20  # StepLR: multiply lr by lr_gamma every lr_step_size epochs
   lr_gamma: 0.5
-  max_epochs: 30  # needs to be well above lr_step_size for the schedule to actually matter
+  max_epochs: 50  # needs to be well above lr_step_size for the schedule to actually matter
   accelerator: auto
   devices: auto
   precision: 32-true

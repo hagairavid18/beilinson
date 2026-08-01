@@ -13,20 +13,28 @@ from torch import nn
 _PRETRAINED_BACKBONES = {"resnet18", "mobilenet_v3_small", "efficientnet_b0"}
 
 
-def _build_pretrained_backbone(name: str) -> tuple[nn.Module, int]:
-    """Returns (feature extractor with its classification head removed, feature_dim)."""
+def _build_pretrained_backbone(name: str, pretrained: bool = True) -> tuple[nn.Module, int]:
+    """Returns (feature extractor with its classification head removed, feature_dim).
+
+    pretrained=False skips downloading ImageNet weights - use when the caller is about
+    to load its own checkpoint over the whole model anyway (e.g. inference notebooks),
+    since the downloaded weights would just get overwritten.
+    """
     if name == "resnet18":
-        net = tv_models.resnet18(weights=tv_models.ResNet18_Weights.IMAGENET1K_V1)
+        weights = tv_models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None
+        net = tv_models.resnet18(weights=weights)
         feature_dim = net.fc.in_features
         net.fc = nn.Identity()
         return net, feature_dim
     if name == "mobilenet_v3_small":
-        net = tv_models.mobilenet_v3_small(weights=tv_models.MobileNet_V3_Small_Weights.IMAGENET1K_V1)
+        weights = tv_models.MobileNet_V3_Small_Weights.IMAGENET1K_V1 if pretrained else None
+        net = tv_models.mobilenet_v3_small(weights=weights)
         feature_dim = net.classifier[0].in_features
         net.classifier = nn.Identity()
         return net, feature_dim
     if name == "efficientnet_b0":
-        net = tv_models.efficientnet_b0(weights=tv_models.EfficientNet_B0_Weights.IMAGENET1K_V1)
+        weights = tv_models.EfficientNet_B0_Weights.IMAGENET1K_V1 if pretrained else None
+        net = tv_models.efficientnet_b0(weights=weights)
         feature_dim = net.classifier[1].in_features
         net.classifier = nn.Identity()
         return net, feature_dim
@@ -84,9 +92,10 @@ class PretrainedFrameEncoder(nn.Module):
         embedding_dim: int = 128,
         dropout: float = 0.2,
         freeze: bool = True,
+        pretrained: bool = True,
     ) -> None:
         super().__init__()
-        self.backbone, feature_dim = _build_pretrained_backbone(backbone)
+        self.backbone, feature_dim = _build_pretrained_backbone(backbone, pretrained=pretrained)
         if freeze:
             for param in self.backbone.parameters():
                 param.requires_grad = False
@@ -112,6 +121,8 @@ class SequenceClassifier(nn.Module):
         temporal_pooling: str = "mean",
         backbone: str = "custom",
         freeze_backbone: bool = True,
+        pretrained_backbone: bool = True,
+        classifier_hidden_dim: int | None = None,
     ) -> None:
         super().__init__()
         self.temporal_pooling = temporal_pooling.lower()
@@ -129,6 +140,7 @@ class SequenceClassifier(nn.Module):
                 embedding_dim=embedding_dim,
                 dropout=dropout,
                 freeze=freeze_backbone,
+                pretrained=pretrained_backbone,
             )
         else:
             raise ValueError(f"Unknown backbone={backbone!r}, expected 'custom' or one of {sorted(_PRETRAINED_BACKBONES)}")
@@ -147,11 +159,21 @@ class SequenceClassifier(nn.Module):
             self.temporal = None
             feature_dim = embedding_dim
 
-        self.classifier = nn.Sequential(
-            nn.LayerNorm(feature_dim),
-            nn.Dropout(dropout),
-            nn.Linear(feature_dim, num_classes),
-        )
+        if classifier_hidden_dim:
+            self.classifier = nn.Sequential(
+                nn.LayerNorm(feature_dim),
+                nn.Dropout(dropout),
+                nn.Linear(feature_dim, classifier_hidden_dim),
+                nn.ReLU(inplace=True),
+                nn.Dropout(dropout),
+                nn.Linear(classifier_hidden_dim, num_classes),
+            )
+        else:
+            self.classifier = nn.Sequential(
+                nn.LayerNorm(feature_dim),
+                nn.Dropout(dropout),
+                nn.Linear(feature_dim, num_classes),
+            )
 
     def _aggregate_temporal(self, embeddings: torch.Tensor) -> torch.Tensor:
         if self.temporal_pooling == "mean":

@@ -18,6 +18,54 @@ from data_splitter import IMAGE_EXTS, build_artifacts
 KAGGLE_DATASET = "hasyimabdillah/workoutexercises-images"
 
 
+def sync_repo(project_root: Path, branch: str = "main") -> None:
+    """Pull the latest code, self-healing against diverged history (e.g. a commit made
+    directly in a previous Colab session) via reset --hard - this VM is ephemeral and
+    origin is the source of truth, so tracked files always just match it. Untracked
+    files (checkpoints, the image cache; both under the gitignored artifacts/) are
+    never touched by reset --hard.
+    """
+    import subprocess
+
+    def _run_git(*args: str) -> None:
+        result = subprocess.run(["git", *args], capture_output=True, text=True)
+        if result.returncode != 0:
+            print(result.stdout)
+            print(result.stderr)
+            raise RuntimeError(f"git {' '.join(args)} failed (exit {result.returncode}) - see output above")
+
+    try:
+        _run_git("-C", str(project_root), "pull")
+    except RuntimeError:
+        print(f"git pull failed; resetting tracked files to match origin/{branch}...")
+        _run_git("-C", str(project_root), "fetch", "origin", branch)
+        _run_git("-C", str(project_root), "reset", "--hard", f"origin/{branch}")
+
+
+def launch_tensorboard(logdir: Path, port: int = 6006) -> str:
+    """Start (or reuse) a TensorBoard server for logdir and open it in its own browser
+    tab/window instead of embedding it inline in the notebook output, which gets slow
+    and cramped over a long training run. On Colab this opens via the proxied port
+    (a real new tab); locally it opens the default browser at localhost.
+    """
+    import webbrowser
+
+    from tensorboard import program
+
+    tb = program.TensorBoard()
+    tb.configure(argv=[None, "--logdir", str(logdir), "--port", str(port)])
+    url = tb.launch()
+
+    try:
+        from google.colab import output
+
+        output.serve_kernel_port_as_window(port)
+    except ImportError:
+        webbrowser.open(url)
+
+    return url
+
+
 def ensure_dataset(project_root: Path) -> list[str]:
     """Make sure project_root/data has class folders, downloading from Kaggle if needed."""
     data_dir = project_root / "data"

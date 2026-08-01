@@ -1,3 +1,5 @@
+exp_name: resnet18  # names this run's output folder, artifacts/<exp_name>/
+
 mode:
   name: colab_training
   seed: 42
