@@ -18,8 +18,9 @@ data:
   augment: true  # train split only: per-epoch temporal jitter + random horizontal flip
 
 model:
-  # Same as the current SOTA config (configs/base.yaml, 73.5% val_acc single split) but
-  # cross-validated across 5 folds - averages out the noise from one small, fixed val split.
+  # Same architecture as the current default (configs/base.yaml, 73.5% val_acc on a single
+  # 70/15/15 split) but cross-validated across 5 folds - averages out the noise from
+  # relying on just one small, fixed val split. See 04_train_kfold_colab.ipynb.
   backbone: efficientnet_b0
   freeze_backbone: true  # only train the projection/classifier head on top of it
   in_channels: 3

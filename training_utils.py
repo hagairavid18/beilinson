@@ -101,6 +101,9 @@ def ensure_artifacts(cfg: dict[str, Any], project_root: Path) -> dict[str, Path]
             train_frac=float(data_cfg.get("train_frac", 0.70)),
             val_frac=float(data_cfg.get("val_frac", 0.15)),
             test_frac=float(data_cfg.get("test_frac", 0.15)),
+            n_folds=data_cfg.get("n_folds"),
+            fold_index=int(data_cfg.get("fold_index", 0)),
+            full_retrain=bool(data_cfg.get("full_retrain", False)),
         )
 
     return {
@@ -313,11 +316,18 @@ def evaluate_multi_clip(
 
 def _run_training(cfg: dict[str, Any], project_root: Path) -> dict[str, Any]:
     """Runs one already-loaded config's full pipeline (dataloaders -> model ->
-    Trainer.fit) end to end and returns {exp_name, fold_index, best_val_acc,
-    best_checkpoint}. Mirrors 03_train_colab.ipynb's individual cells. Takes a dict
-    (not a path) so run_kfold_sweep can inject a different fold_index/exp_name per
-    fold without writing a separate yaml file per fold.
+    Trainer.fit) end to end and returns {exp_name, fold_index, best_val_acc, best_epoch,
+    best_checkpoint}. Mirrors 03_train_colab.ipynb's individual cells. Takes a dict (not
+    a path) so run_kfold_sweep/run_final_training can inject a different
+    fold_index/full_retrain/exp_name per run without writing a separate yaml file each
+    time.
+
+    data.full_retrain=True (see run_final_training) skips the val split entirely - no
+    EarlyStopping/best-by-val_acc then, since there's no val metric to rank by; just
+    trains for exactly training.max_epochs and keeps the last epoch's checkpoint.
     """
+    import re
+
     from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
     from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger
 
@@ -333,6 +343,7 @@ def _run_training(cfg: dict[str, Any], project_root: Path) -> dict[str, Any]:
     artifacts = ensure_artifacts(cfg, project_root)
 
     data_cfg = cfg["data"]
+    full_retrain = bool(data_cfg.get("full_retrain", False))
     cached_data_root = ensure_image_cache(project_root, data_cfg["image_size"])
 
     train_dataset = WorkoutSequenceDataset(
@@ -342,9 +353,6 @@ def _run_training(cfg: dict[str, Any], project_root: Path) -> dict[str, Any]:
         label_map_path=artifacts["label_map"],
         sequence_len=data_cfg["sequence_len"],
     )
-    val_dataset = WorkoutSequenceDataset(
-        artifacts["sequence_manifest"], cached_data_root, split="val", image_size=data_cfg["image_size"]
-    )
 
     num_workers = data_cfg["num_workers"]
     pin_memory = torch.cuda.is_available()
@@ -352,10 +360,16 @@ def _run_training(cfg: dict[str, Any], project_root: Path) -> dict[str, Any]:
         train_dataset, batch_size=data_cfg["batch_size"], shuffle=True,
         num_workers=num_workers, pin_memory=pin_memory, persistent_workers=bool(num_workers),
     )
-    val_loader = DataLoader(
-        val_dataset, batch_size=data_cfg["batch_size"], shuffle=False,
-        num_workers=num_workers, pin_memory=pin_memory, persistent_workers=bool(num_workers),
-    )
+
+    val_loader = None
+    if not full_retrain:
+        val_dataset = WorkoutSequenceDataset(
+            artifacts["sequence_manifest"], cached_data_root, split="val", image_size=data_cfg["image_size"]
+        )
+        val_loader = DataLoader(
+            val_dataset, batch_size=data_cfg["batch_size"], shuffle=False,
+            num_workers=num_workers, pin_memory=pin_memory, persistent_workers=bool(num_workers),
+        )
 
     label_map = pd.read_csv(artifacts["label_map"])
     num_classes = int(label_map["label_id"].nunique())
@@ -389,6 +403,18 @@ def _run_training(cfg: dict[str, Any], project_root: Path) -> dict[str, Any]:
     if precision == "auto":
         precision = "16-mixed" if torch.cuda.is_available() else "32-true"
 
+    if full_retrain:
+        checkpoint_callback = ModelCheckpoint(
+            dirpath=checkpoint_dir, filename="epoch{epoch:02d}", save_top_k=1,
+        )
+        callbacks = [checkpoint_callback]
+    else:
+        checkpoint_callback = ModelCheckpoint(
+            dirpath=checkpoint_dir, filename="epoch{epoch:02d}-{val_acc:.3f}",
+            monitor=monitor, mode=monitor_mode, save_top_k=1,
+        )
+        callbacks = [checkpoint_callback, EarlyStopping(monitor=monitor, mode=monitor_mode, patience=training_cfg.get("patience", 4))]
+
     trainer = pl.Trainer(
         max_epochs=training_cfg.get("max_epochs", 10),
         accelerator=training_cfg.get("accelerator", "auto"),
@@ -397,21 +423,19 @@ def _run_training(cfg: dict[str, Any], project_root: Path) -> dict[str, Any]:
         log_every_n_steps=training_cfg.get("log_every_n_steps", 10),
         default_root_dir=str(exp_dir),
         logger=[CSVLogger(save_dir=str(exp_dir)), TensorBoardLogger(save_dir=str(exp_dir), name="tb_logs")],
-        callbacks=[
-            ModelCheckpoint(
-                dirpath=checkpoint_dir, filename="epoch{epoch:02d}-{val_acc:.3f}",
-                monitor=monitor, mode=monitor_mode, save_top_k=1,
-            ),
-            EarlyStopping(monitor=monitor, mode=monitor_mode, patience=training_cfg.get("patience", 4)),
-        ],
+        callbacks=callbacks,
     )
     trainer.fit(lit_module, train_loader, val_loader)
+
+    best_score = checkpoint_callback.best_model_score
+    epoch_match = re.search(r"epoch(\d+)", Path(checkpoint_callback.best_model_path).stem)
 
     return {
         "exp_name": exp_name,
         "fold_index": data_cfg.get("fold_index"),
-        "best_val_acc": float(trainer.checkpoint_callback.best_model_score),
-        "best_checkpoint": trainer.checkpoint_callback.best_model_path,
+        "best_val_acc": float(best_score) if best_score is not None else None,
+        "best_epoch": int(epoch_match.group(1)) if epoch_match else None,
+        "best_checkpoint": checkpoint_callback.best_model_path,
     }
 
 
@@ -454,3 +478,35 @@ def run_kfold_sweep(config_path: Path, project_root: Path) -> pd.DataFrame:
     mean_acc, std_acc = results_df["best_val_acc"].mean(), results_df["best_val_acc"].std()
     print(f"\nMean val_acc across {n_folds} folds: {mean_acc:.4f} ± {std_acc:.4f}")
     return results_df
+
+
+def run_final_training(
+    config_path: Path, project_root: Path, max_epochs: int, target_exp_name: str | None = None
+) -> dict[str, Any]:
+    """The recommended step after run_kfold_sweep has validated the setup: retrains on
+    the FULL non-test pool (train+val combined - no held-out val) for a fixed max_epochs,
+    e.g. round(fold_results_df['best_epoch'].mean()). No val split means no
+    EarlyStopping/best-by-val_acc (see _run_training's full_retrain branch) - this just
+    trains for exactly max_epochs and keeps the last epoch's weights. Same held-out test
+    set as every fold (same seed), so it's still evaluable via 05_inference.ipynb. Derives
+    everything from the config used for the sweep - no separate yaml file needed.
+
+    target_exp_name (default: config's own exp_name + "_final") lets the result land in a
+    different artifacts/<exp_name>/ folder - e.g. pointed at configs/base.yaml's exp_name,
+    so this becomes the default checkpoint 05_inference.ipynb and 03_train_colab.ipynb
+    already discover, without editing base.yaml itself.
+    """
+    import yaml
+
+    with open(config_path, "r", encoding="utf-8") as handle:
+        cfg = yaml.safe_load(handle)
+
+    cfg["exp_name"] = target_exp_name or f"{cfg['exp_name']}_final"
+    cfg["data"]["full_retrain"] = True
+    cfg["data"].pop("n_folds", None)
+    cfg["data"].pop("fold_index", None)
+    cfg["training"]["max_epochs"] = max_epochs
+
+    result = _run_training(cfg, project_root)
+    print(f"Final model trained for {max_epochs} epochs: {result['best_checkpoint']}")
+    return result

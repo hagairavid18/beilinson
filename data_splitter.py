@@ -231,8 +231,8 @@ def assign_split_frames_kfold(
     set (checkpoints from different folds stay comparable, and 05_inference.ipynb's
     test-set evaluation doesn't care which fold trained the checkpoint). The rest is
     divided into n_folds round-robin folds; fold_index becomes val, the other folds
-    become train. Run the same config n_folds times, bumping fold_index each time (see
-    configs/efficientnet_b0_fold*.yaml).
+    become train. See training_utils.run_kfold_sweep, which calls this once per fold
+    from a single config instead of needing a separate yaml file per fold.
     """
     if not (0 <= fold_index < n_folds):
         raise ValueError(f"fold_index must be in [0, {n_folds}), got {fold_index}")
@@ -257,6 +257,32 @@ def assign_split_frames_kfold(
 
         clip_ids = test_ids + pool_ids
         splits = ["test"] * len(test_ids) + split
+        parts.append(pd.DataFrame({"class": class_name, "clip_id": clip_ids, "split": splits}))
+
+    split_clips = pd.concat(parts, ignore_index=True)
+    return split_clips
+
+
+def assign_split_full(clip_meta: pd.DataFrame, seed: int, test_frac: float) -> pd.DataFrame:
+    """The final-retrain split, after k-fold CV has already validated the setup: the same
+    held-out test slice as assign_split_frames_kfold (same seed -> identical test set),
+    but every remaining clip becomes train - no val is held out, squeezing the val folds'
+    data back into training. See training_utils.run_final_training."""
+    rng = np.random.default_rng(seed)
+    parts: list[pd.DataFrame] = []
+
+    for class_name, group in clip_meta.groupby("class"):
+        ordered_clip_ids = _ordered_clip_ids(group, rng)
+
+        total = len(ordered_clip_ids)
+        n_test = int(round(test_frac * total))
+        if total >= 2:
+            n_test = max(0, min(n_test, total - 1))
+
+        test_ids = ordered_clip_ids[:n_test]
+        train_ids = ordered_clip_ids[n_test:]
+        clip_ids = test_ids + train_ids
+        splits = ["test"] * len(test_ids) + ["train"] * len(train_ids)
         parts.append(pd.DataFrame({"class": class_name, "clip_id": clip_ids, "split": splits}))
 
     split_clips = pd.concat(parts, ignore_index=True)
@@ -303,6 +329,7 @@ def build_artifacts(
     test_frac: float,
     n_folds: int | None = None,
     fold_index: int = 0,
+    full_retrain: bool = False,
 ) -> dict[str, Path]:
     data_dir = Path(data_dir).resolve()
     artifacts_dir = Path(artifacts_dir).resolve()
@@ -310,7 +337,9 @@ def build_artifacts(
 
     df_frames = _collect_frame_rows(data_dir)
     clip_meta = build_clip_meta(df_frames, data_dir)
-    if n_folds:
+    if full_retrain:
+        split_clips = assign_split_full(clip_meta, seed, test_frac)
+    elif n_folds:
         split_clips = assign_split_frames_kfold(clip_meta, seed, n_folds, fold_index, test_frac)
     else:
         split_clips = assign_split_frames(clip_meta, seed, train_frac, val_frac, test_frac)
@@ -353,6 +382,7 @@ def _config_args(config: dict[str, Any]) -> dict[str, Any]:
         "sequence_len": int(data.get("sequence_len", 16)),
         "n_folds": data.get("n_folds"),
         "fold_index": int(data.get("fold_index", 0)),
+        "full_retrain": bool(data.get("full_retrain", False)),
     }
 
 
@@ -368,6 +398,7 @@ def main() -> None:
     parser.add_argument("--test-frac", type=float, default=None)
     parser.add_argument("--n-folds", type=int, default=None)
     parser.add_argument("--fold-index", type=int, default=None)
+    parser.add_argument("--full-retrain", action="store_true", default=None)
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -384,6 +415,7 @@ def main() -> None:
     test_frac = args.test_frac if args.test_frac is not None else config_args["test_frac"]
     n_folds = args.n_folds if args.n_folds is not None else config_args["n_folds"]
     fold_index = args.fold_index if args.fold_index is not None else config_args["fold_index"]
+    full_retrain = args.full_retrain if args.full_retrain is not None else config_args["full_retrain"]
 
     data_path = resolve_path(project_root, data_dir)
     artifacts_path = resolve_path(project_root, artifacts_dir)
@@ -398,6 +430,7 @@ def main() -> None:
         test_frac=test_frac,
         n_folds=n_folds,
         fold_index=fold_index,
+        full_retrain=full_retrain,
     )
 
     for name, path in outputs.items():
