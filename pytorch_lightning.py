@@ -7,12 +7,21 @@ import lightning.pytorch as pl
 
 
 class WorkoutLightningModule(pl.LightningModule):
-    def __init__(self, model: nn.Module, lr: float = 1e-3, weight_decay: float = 0.0) -> None:
+    def __init__(
+        self,
+        model: nn.Module,
+        lr: float = 1e-3,
+        weight_decay: float = 0.0,
+        lr_step_size: int | None = None,
+        lr_gamma: float = 0.5,
+    ) -> None:
         super().__init__()
         self.save_hyperparameters(ignore=["model"])
         self.model = model
         self.lr = lr
         self.weight_decay = weight_decay
+        self.lr_step_size = lr_step_size
+        self.lr_gamma = lr_gamma
 
     def forward(self, frames: torch.Tensor) -> torch.Tensor:
         return self.model(frames)
@@ -52,4 +61,8 @@ class WorkoutLightningModule(pl.LightningModule):
         }
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        if not self.lr_step_size:
+            return optimizer
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.lr_step_size, gamma=self.lr_gamma)
+        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"}}

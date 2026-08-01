@@ -30,10 +30,11 @@ model:
 training:
   lr: 0.001
   weight_decay: 0.0001
-  max_epochs: 10
+  lr_step_size: 10  # StepLR: multiply lr by lr_gamma every lr_step_size epochs
+  lr_gamma: 0.5
+  max_epochs: 30  # needs to be well above lr_step_size for the schedule to actually matter
   accelerator: auto
   devices: auto
   precision: 32-true
   log_every_n_steps: 10
   patience: 4
-  checkpoint_dir: artifacts/checkpoints

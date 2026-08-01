@@ -143,16 +143,20 @@ def save_results(
     test_results: list[dict[str, float]],
     prediction_batches: list[dict[str, Any]],
     project_root: Path,
+    output_dir: Path,
     cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Flatten predictions to CSV and write a training_summary.json; returns the summary dict.
-
-    Persists cfg['model'] (the architecture config, e.g. which backbone) alongside the
-    checkpoint path, so 05_inference.ipynb can rebuild the exact matching architecture
-    later even if configs/base.yaml's defaults have since changed.
+    """Flatten predictions to CSV and write a training_summary.json under output_dir
+    (typically the current experiment's artifacts/<exp_name>/ folder); returns the summary
+    dict. Persists cfg['model'] (the architecture config, e.g. which backbone) alongside the
+    checkpoint path, so 05_inference.ipynb can rebuild the exact matching architecture later
+    even if configs/base.yaml's defaults have since changed.
     """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     prediction_frame = _flatten_prediction_batches(prediction_batches)
-    prediction_path = artifacts["sequence_manifest"].parent / "predictions.csv"
+    prediction_path = output_dir / "predictions.csv"
     prediction_frame.to_csv(prediction_path, index=False)
 
     summary = {
@@ -164,7 +168,7 @@ def save_results(
         "model_config": (cfg or {}).get("model", {}),
     }
 
-    summary_path = artifacts["sequence_manifest"].parent / "training_summary.json"
+    summary_path = output_dir / "training_summary.json"
     with open(summary_path, "w", encoding="utf-8") as handle:
         json.dump(summary, handle, indent=2)
 
