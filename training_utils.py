@@ -428,7 +428,10 @@ def _run_training(cfg: dict[str, Any], project_root: Path) -> dict[str, Any]:
     trainer.fit(lit_module, train_loader, val_loader)
 
     best_score = checkpoint_callback.best_model_score
-    epoch_match = re.search(r"epoch(\d+)", Path(checkpoint_callback.best_model_path).stem)
+    # Lightning's auto_insert_metric_name renders our "epoch{epoch:02d}-..." filename
+    # template as "epochepoch=19-val_acc=0.681.ckpt" (it inserts its own "epoch=" before
+    # the value) - match the "=" so this actually finds the digits.
+    epoch_match = re.search(r"epoch=?(\d+)", Path(checkpoint_callback.best_model_path).stem)
 
     return {
         "exp_name": exp_name,
