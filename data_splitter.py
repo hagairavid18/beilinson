@@ -194,7 +194,6 @@ def build_sequence_manifest(df_frames_split: pd.DataFrame, sequence_len: int, da
             "frame_idx_min": ordered["frame_idx"].min(skipna=True),
             "frame_idx_max": ordered["frame_idx"].max(skipna=True),
             "token_type": first_row.get("token_type", "unknown"),
-            "label_id": None,
         }
         for idx, frame_col in enumerate(frame_cols):
             row[frame_col] = rel_paths[chosen[idx]]
