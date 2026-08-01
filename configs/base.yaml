@@ -19,11 +19,13 @@ data:
   val_frac: 0.15
   test_frac: 0.15
   manifest_name: sequence_manifest_len16.csv
+  augment: true  # train split only: per-epoch temporal jitter + random horizontal flip
 
 model:
   # backbone: custom | resnet18 | mobilenet_v3_small | efficientnet_b0
   # efficientnet_b0 is the best performer of the sweep so far - 73.5% val_acc
   # (vs. 72.3% for resnet18/emb256, 68.1% for resnet18/emb128) - see artifacts/efficientnet_b0/.
+  # That checkpoint predates data.augment above (trained without it) - not yet re-benchmarked with it on.
   backbone: efficientnet_b0
   freeze_backbone: true  # only train the projection/classifier head on top of it
   in_channels: 3

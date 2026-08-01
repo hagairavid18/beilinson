@@ -86,6 +86,21 @@ def sample_or_pad_indices(num_frames: int, sequence_len: int) -> np.ndarray:
     return np.concatenate([indices, pad])
 
 
+def sample_random_indices(num_frames: int, sequence_len: int, rng: np.random.Generator) -> np.ndarray:
+    """Like sample_or_pad_indices, but jitters within each segment (a random frame per
+    segment instead of the segment boundary) - for per-epoch temporal augmentation on the
+    train split. sample_or_pad_indices' deterministic, evenly-spaced sampling stays used
+    for val/test, so evaluation is reproducible."""
+    if num_frames <= 0:
+        return np.zeros(sequence_len, dtype=int)
+    if num_frames <= sequence_len:
+        indices = np.arange(num_frames, dtype=int)
+        pad = np.full(sequence_len - num_frames, num_frames - 1, dtype=int)
+        return np.concatenate([indices, pad])
+    boundaries = np.linspace(0, num_frames, sequence_len + 1, dtype=int)
+    return np.array([rng.integers(start, end) for start, end in zip(boundaries[:-1], boundaries[1:])])
+
+
 def sample_or_pad_indices_multi(num_frames: int, sequence_len: int, num_clips: int) -> np.ndarray:
     """num_clips windows of sequence_len indices each, evenly covering [0, num_frames).
 
@@ -155,6 +170,24 @@ def build_clip_meta(df_frames: pd.DataFrame, data_dir: Path) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _ordered_clip_ids(group: pd.DataFrame, rng: np.random.Generator) -> list[str]:
+    """Class-balanced bucket order: shuffles clip_ids within each (length, resolution)
+    bucket, then interleaves across buckets, so a downstream frac/fold cut of the
+    resulting list samples evenly across bucket types instead of clumping them."""
+    bucket_lists: list[list[str]] = []
+    for _, bucket_group in group.groupby("bucket_key"):
+        clip_ids = bucket_group["clip_id"].to_numpy().copy()
+        rng.shuffle(clip_ids)
+        bucket_lists.append(list(clip_ids))
+
+    ordered_clip_ids: list[str] = []
+    while any(bucket_lists):
+        for bucket_ids in bucket_lists:
+            if bucket_ids:
+                ordered_clip_ids.append(bucket_ids.pop())
+    return ordered_clip_ids
+
+
 def assign_split_frames(
     clip_meta: pd.DataFrame,
     seed: int,
@@ -169,17 +202,7 @@ def assign_split_frames(
     parts: list[pd.DataFrame] = []
 
     for class_name, group in clip_meta.groupby("class"):
-        bucket_lists: list[list[str]] = []
-        for _, bucket_group in group.groupby("bucket_key"):
-            clip_ids = bucket_group["clip_id"].to_numpy().copy()
-            rng.shuffle(clip_ids)
-            bucket_lists.append(list(clip_ids))
-
-        ordered_clip_ids: list[str] = []
-        while any(bucket_lists):
-            for bucket_ids in bucket_lists:
-                if bucket_ids:
-                    ordered_clip_ids.append(bucket_ids.pop())
+        ordered_clip_ids = _ordered_clip_ids(group, rng)
 
         total = len(ordered_clip_ids)
         n_train = int(round(train_frac * total))
@@ -191,6 +214,50 @@ def assign_split_frames(
         split[:n_train] = "train"
         split[n_train : n_train + n_val] = "val"
         parts.append(pd.DataFrame({"class": class_name, "clip_id": ordered_clip_ids, "split": split}))
+
+    split_clips = pd.concat(parts, ignore_index=True)
+    return split_clips
+
+
+def assign_split_frames_kfold(
+    clip_meta: pd.DataFrame,
+    seed: int,
+    n_folds: int,
+    fold_index: int,
+    test_frac: float,
+) -> pd.DataFrame:
+    """K-fold split for small-dataset cross-validation: a test slice is held out first,
+    using the same seed regardless of fold_index so every fold shares the identical test
+    set (checkpoints from different folds stay comparable, and 05_inference.ipynb's
+    test-set evaluation doesn't care which fold trained the checkpoint). The rest is
+    divided into n_folds round-robin folds; fold_index becomes val, the other folds
+    become train. Run the same config n_folds times, bumping fold_index each time (see
+    configs/efficientnet_b0_fold*.yaml).
+    """
+    if not (0 <= fold_index < n_folds):
+        raise ValueError(f"fold_index must be in [0, {n_folds}), got {fold_index}")
+
+    rng = np.random.default_rng(seed)
+    parts: list[pd.DataFrame] = []
+
+    for class_name, group in clip_meta.groupby("class"):
+        ordered_clip_ids = _ordered_clip_ids(group, rng)
+
+        total = len(ordered_clip_ids)
+        n_test = int(round(test_frac * total))
+        if total >= n_folds + 1:
+            n_test = max(0, min(n_test, total - n_folds))
+
+        test_ids = ordered_clip_ids[:n_test]
+        pool_ids = ordered_clip_ids[n_test:]
+
+        split = ["train"] * len(pool_ids)
+        for i in range(fold_index, len(pool_ids), n_folds):
+            split[i] = "val"
+
+        clip_ids = test_ids + pool_ids
+        splits = ["test"] * len(test_ids) + split
+        parts.append(pd.DataFrame({"class": class_name, "clip_id": clip_ids, "split": splits}))
 
     split_clips = pd.concat(parts, ignore_index=True)
     return split_clips
@@ -234,6 +301,8 @@ def build_artifacts(
     train_frac: float,
     val_frac: float,
     test_frac: float,
+    n_folds: int | None = None,
+    fold_index: int = 0,
 ) -> dict[str, Path]:
     data_dir = Path(data_dir).resolve()
     artifacts_dir = Path(artifacts_dir).resolve()
@@ -241,7 +310,10 @@ def build_artifacts(
 
     df_frames = _collect_frame_rows(data_dir)
     clip_meta = build_clip_meta(df_frames, data_dir)
-    split_clips = assign_split_frames(clip_meta, seed, train_frac, val_frac, test_frac)
+    if n_folds:
+        split_clips = assign_split_frames_kfold(clip_meta, seed, n_folds, fold_index, test_frac)
+    else:
+        split_clips = assign_split_frames(clip_meta, seed, train_frac, val_frac, test_frac)
     df_frames_split = df_frames.merge(split_clips, on=["class", "clip_id"], how="left")
     clip_meta_split = clip_meta.merge(split_clips, on=["class", "clip_id"], how="left")
     sequence_manifest, label_map = build_sequence_manifest(df_frames_split, sequence_len, data_dir)
@@ -279,6 +351,8 @@ def _config_args(config: dict[str, Any]) -> dict[str, Any]:
         "val_frac": float(data.get("val_frac", 0.15)),
         "test_frac": float(data.get("test_frac", 0.15)),
         "sequence_len": int(data.get("sequence_len", 16)),
+        "n_folds": data.get("n_folds"),
+        "fold_index": int(data.get("fold_index", 0)),
     }
 
 
@@ -292,6 +366,8 @@ def main() -> None:
     parser.add_argument("--train-frac", type=float, default=None)
     parser.add_argument("--val-frac", type=float, default=None)
     parser.add_argument("--test-frac", type=float, default=None)
+    parser.add_argument("--n-folds", type=int, default=None)
+    parser.add_argument("--fold-index", type=int, default=None)
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -306,6 +382,8 @@ def main() -> None:
     train_frac = args.train_frac if args.train_frac is not None else config_args["train_frac"]
     val_frac = args.val_frac if args.val_frac is not None else config_args["val_frac"]
     test_frac = args.test_frac if args.test_frac is not None else config_args["test_frac"]
+    n_folds = args.n_folds if args.n_folds is not None else config_args["n_folds"]
+    fold_index = args.fold_index if args.fold_index is not None else config_args["fold_index"]
 
     data_path = resolve_path(project_root, data_dir)
     artifacts_path = resolve_path(project_root, artifacts_dir)
@@ -318,6 +396,8 @@ def main() -> None:
         train_frac=train_frac,
         val_frac=val_frac,
         test_frac=test_frac,
+        n_folds=n_folds,
+        fold_index=fold_index,
     )
 
     for name, path in outputs.items():
